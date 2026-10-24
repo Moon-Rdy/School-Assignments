@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hamilton · AI Coworker</title>
+  <style>
+    /* ========== Reset ========== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background-color: #F5C518;
+      /* Vintage print poster: halftone dots + faint paper grain + soft vignette */
+      background-image:
+        radial-gradient(ellipse at 50% 35%, transparent 55%, rgba(0, 0, 0, 0.10) 100%),
+        radial-gradient(circle, rgba(0, 0, 0, 0.055) 1px, transparent 1.5px),
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.018) 0px, rgba(0, 0, 0, 0.018) 1px, transparent 1px, transparent 3px);
+      background-size: 100% 100%, 6px 6px, 100% 3px;
+      background-repeat: no-repeat, repeat, repeat;
+      font-family: Georgia, "Times New Roman", "Palatino", serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 30px 20px;
+    }
+
+    /* ========== Main Container ========== */
+    .app {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+
+    /* ========== Top Card: White Paper Document ========== */
+    .card {
+      width: 100%;
+      background: #fffef8;
+      /* Thin paper: no black frame, only a faint edge + soft light shadow */
+      border: 1px solid rgba(0, 0, 0, 0.10);
+      border-radius: 3px;
+      padding: 20px 28px;
+      position: relative;
+      /* Scrollable paper: content longer than the box scrolls vertically */
+      max-height: 240px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111111;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    /* ===== AI scan-reading line (sweeps top → bottom over the paper) ===== */
+    .scan-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, rgba(0, 0, 0, 0), #000000 15%, #000000 85%, rgba(0, 0, 0, 0));
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+      transition: top 3.5s linear;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ===== AI Summary Area (below the paper, appears after scan) ===== */
+    .summary-area {
+      width: 100%;
+      background: #fffef6;
+      border: 1px solid rgba(0, 0, 0, 0.10);
+      border-radius: 3px;
+      padding: 14px 20px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.10);
+      opacity: 0;
+      transform: translateY(8px);
+      display: none;
+    }
+
+    .summary-area.visible {
+      display: block;
+      animation: msgIn 0.4s ease forwards;
+    }
+
+    .summary-label {
+      font-size: 14px;
+      color: #111111;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .summary-text {
+      font-size: 14px;
+      color: #111111;
+      line-height: 1.7;
+    }
+
+    .card-section-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111111;
+      margin-bottom: 8px;
+      margin-top: 12px;
+    }
+
+    .card-bio {
+      font-size: 14px;
+      color: #111111;
+      line-height: 1.75;
+    }
+
+    /* ========== Characters Row ========== */
+    .characters-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 10px;
+      position: relative;
+    }
+
+    .avatar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .avatar-icon {
+      font-size: 72px;
+      line-height: 1;
+    }
+
+    .avatar-label {
+      font-size: 13px;
+      color: #111111;
+      letter-spacing: 1px;
+      font-weight: 700;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      text-transform: uppercase;
+    }
+
+    /* Robot approach animation */
+    #machineAvatar {
+      transition: transform 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    #machineAvatar.approaching {
+      transform: translateX(30px);
+    }
+
+    /* ===== Thinking bubble above character ===== */
+    .thinking-bubble {
+      position: absolute;
+      top: -50px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffff;
+      border: 3px solid #000000;
+      /* Uneven hand-inked corners */
+      border-radius: 18px 22px 19px 21px / 21px 18px 22px 19px;
+      padding: 8px 16px;
+      font-size: 24px;
+      color: #000000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      box-shadow: 3px 3px 0px #000000;
+      white-space: nowrap;
+    }
+
+    .thinking-bubble.visible {
+      opacity: 1;
+    }
+
+    .thinking-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 10px solid #000000;
+    }
+
+    .thinking-bubble .dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .thinking-bubble .dots span {
+      width: 8px;
+      height: 8px;
+      background: #000000;
+      border-radius: 50%;
+      animation: dotPulse 1.2s infinite ease-in-out;
+    }
+
+    .thinking-bubble .dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .thinking-bubble .dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes dotPulse {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* ========== Chat Area ========== */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      overflow-y: auto;
+      max-height: 240px;
+      min-width: 0;
+    }
+
+    .chat-msg {
+      max-width: 320px;
+      padding: 10px 16px;
+      border-radius: 18px;
+      font-size: 13px;
+      line-height: 1.6;
+      word-break: break-word;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: msgIn 0.4s ease forwards;
+      border: none;
+      box-shadow: none;
+      position: relative;
+    }
+
+    @keyframes msgIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-msg.machine {
+      background: #ffffff;
+      color: #111111;
+      align-self: flex-start;
+      border-top-left-radius: 4px;
+    }
+
+    /* Tail pointing toward machine (left) */
+    .chat-msg.machine::after {
+      content: '';
+      position: absolute;
+      left: -6px;
+      bottom: 10px;
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-right: 8px solid #ffffff;
+    }
+
+    .chat-msg.ai {
+      background: #b8c9a4;
+      color: #111111;
+      align-self: flex-end;
+      border-top-right-radius: 4px;
+    }
+
+    /* Tail pointing toward AI coworker (right) */
+    .chat-msg.ai::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      bottom: 10px;
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 8px solid #b8c9a4;
+    }
+
+    /* ===== User-triggered AI response (above input) ===== */
+    .user-response-area {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .user-response-msg {
+      max-width: 420px;
+      padding: 10px 16px;
+      /* Uneven hand-inked corners */
+      border-radius: 6px 3px 7px 3px / 3px 7px 3px 6px;
+      font-size: 13px;
+      line-height: 1.6;
+      word-break: break-word;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: msgIn 0.4s ease forwards;
+      border: 2px solid #000000;
+      box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.35);
+      background: #cc2222;
+      color: #ffffff;
+      font-weight: 600;
+      position: relative;
+      align-self: center;
+    }
+
+    /* Soft popup style (Rounds 1-3 + pre-phase) */
+    .user-response-msg.soft {
+      background: #ffffff;
+      color: #111111;
+      border-color: #5a7a4a;
+      box-shadow: 3px 3px 0px rgba(90, 122, 74, 0.3);
+      font-weight: 500;
+    }
+
+    /* Aggressive popup style (Rounds 4-5) */
+    .user-response-msg.aggressive {
+      background: #cc2222;
+      color: #ffffff;
+      border-color: #8b0000;
+      box-shadow: 3px 3px 0px rgba(139, 0, 0, 0.4);
+      font-weight: 700;
+    }
+
+    .user-response-msg::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 3px 3px;
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    .user-response-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #111111;
+      font-weight: 700;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .user-response-header .response-icon {
+      font-size: 20px;
+    }
+
+    /* ========== Bottom: Input + Enter Button + 👤 ========== */
+    .input-area {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .input-box {
+      flex: 1;
+      height: 48px;
+      background-color: #ffffff;
+      /* Faint halftone paper texture */
+      background-image: radial-gradient(circle, rgba(0, 0, 0, 0.03) 1px, transparent 1.3px);
+      background-size: 5px 5px;
+      border: 3px solid #000000;
+      /* Uneven hand-inked corners */
+      border-radius: 8px 4px 9px 4px / 4px 9px 4px 8px;
+      padding: 0 24px;
+      font-size: 16px;
+      color: #111111;
+      outline: none;
+      font-family: Georgia, "Times New Roman", serif;
+      box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.45);
+      transition: border-color 0.3s, background-color 0.3s;
+    }
+
+    .input-box::placeholder {
+      color: #999;
+    }
+
+    .input-box:read-only {
+      background-color: rgba(255, 255, 255, 0.7);
+      color: rgba(17, 17, 17, 0.6);
+      cursor: default;
+    }
+
+    .input-box.flash-red {
+      border-color: #cc2222;
+      background-color: #ffcccc;
+    }
+
+    /* ===== Pre-phase: bold + blink input guide ===== */
+    .input-box.pre-phase-blink {
+      font-weight: 700;
+      animation: prePhaseBlink 1s infinite;
+    }
+
+    @keyframes prePhaseBlink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0.3; }
+    }
+
+    .enter-btn {
+      height: 48px;
+      padding: 0 28px;
+      background-color: #111111;
+      /* Faint screen-print texture on black ink */
+      background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1.3px);
+      background-size: 4px 4px;
+      border: 3px solid #000000;
+      /* Uneven hand-inked corners */
+      border-radius: 8px 4px 9px 4px / 4px 9px 4px 8px;
+      font-size: 15px;
+      font-weight: 900;
+      color: #F5C518;
+      cursor: pointer;
+      letter-spacing: 2px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      text-transform: uppercase;
+      box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.6);
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .enter-btn:hover {
+      background-color: #222222;
+    }
+
+    .enter-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ===== Top Card: White Paper Document (pre-rendered, static) ===== -->
+    <div class="card" id="paperCard">
+      <div class="card-title">Hamilton</div>
+
+      <div class="card-section-label">A. Alexander Hamilton: A Brief Biography</div>
+      <div class="card-bio">
+        Alexander Hamilton (c. 1755/1757–1804) was born illegitimate on the Caribbean island of Nevis. His father left the family and his mother died, so as a teenager he worked as a clerk at a trading firm. An essay he wrote about a hurricane impressed local leaders, who funded his education in New York at King's College (now Columbia University). During the Revolutionary War, he served as George Washington's aide-de-camp and later led a charge at the Battle of Yorktown. After the war, he pushed for the new Constitution and co-wrote The Federalist Papers with Madison and Jay, writing 51 of the essays himself. As the first U.S. Secretary of the Treasury, he founded a national bank and built the country's public credit system. In 1797 he publicly confessed to an affair with Maria Reynolds. His eldest son, Philip, was killed in a duel in 1801. Three years later, Hamilton himself died in a duel with Vice President Aaron Burr.
+      </div>
+    </div>
+
+    <!-- ===== AI Summary Area (below the paper, appears after scan animation) ===== -->
+    <div class="summary-area" id="summaryArea">
+      <div class="summary-label">🤖 AI Summary</div>
+      <div class="summary-text" id="summaryText"></div>
+    </div>
+
+    <!-- ===== Characters Row: Machine (left) — Chat Area (center) — AI Coworker (right) ===== -->
+    <div class="characters-row">
+      <div class="avatar" id="machineAvatar">
+        <div class="thinking-bubble" id="machineThinking">
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <span class="avatar-icon" id="robotIcon">🤖</span>
+        <span class="avatar-label">Machine</span>
+      </div>
+
+      <div class="chat-area" id="chatArea">
+      </div>
+
+      <div class="avatar" id="aiAvatar">
+        <div class="thinking-bubble" id="aiThinking">
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+        <span class="avatar-icon" id="aiIcon">👩‍💻</span>
+        <span class="avatar-label">AI Coworker</span>
+      </div>
+    </div>
+
+    <!-- ===== Bottom: Input + Enter Button + 👤 ===== -->
+    <div class="input-area">
+      <!-- User-triggered AI response area (above input) -->
+      <div class="user-response-area" id="userResponseArea"></div>
+
+      <div class="input-wrapper">
+        <input
+          class="input-box"
+          id="input"
+          type="text"
+          placeholder="Type something…"
+          value=""
+          autocomplete="off"
+          readonly
+        >
+        <button class="enter-btn" id="enterBtn">Enter</button>
+      </div>
+      <div class="avatar">
+        <span class="avatar-icon" id="userIcon">👤</span>
+        <span class="avatar-label">User</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ===== DOM Elements =====
+    const inputEl = document.getElementById('input');
+    const chatArea = document.getElementById('chatArea');
+    const enterBtn = document.getElementById('enterBtn');
+    const robotIcon = document.getElementById('robotIcon');
+    const aiIcon = document.getElementById('aiIcon');
+    const userIcon = document.getElementById('userIcon');
+    const machineAvatar = document.getElementById('machineAvatar');
+    const machineThinking = document.getElementById('machineThinking');
+    const aiThinking = document.getElementById('aiThinking');
+    const cardEl = document.getElementById('paperCard');
+    const summaryArea = document.getElementById('summaryArea');
+    const summaryTextEl = document.getElementById('summaryText');
+    const userResponseArea = document.getElementById('userResponseArea');
+
+    // ===== Conversation Data =====
+    const conversation = [
+      {
+        round: 1,
+        robot: "Reading about Hamilton, the first thing I notice is his origins. Born illegitimate, orphaned young, working as a poor clerk, he started out shut out of respectable society. His later drive came from an outsider trying to prove to the world that he deserved a place in it. At the core of his personality is a deep sense of insecurity.",
+        ai: "That's way too literary. What I want to know is how he actually pulled it off. He took classes at King's College while writing political pamphlets and picking fights in print, and then he went off to war. If that were me, just the classes would wear me out. Was there something unusual about this guy's energy?"
+      },
+      {
+        round: 2,
+        robot: "Energy is only the surface. Look at how much he wrote: 51 of The Federalist Papers, plus one long financial report after another. That isn't just being capable. It's a need to express himself. He believed words could shape a nation and his own fate, and his hurricane essay proved it. For him, writing was a form of self-redemption.",
+        ai: "Then how do you explain the affair? As Treasury Secretary, he spent his days building a financial system and his nights in an affair. He got blackmailed and paid hush money, and in the end he published a pamphlet laying out every detail himself. Is that self-redemption too? To me he looks like a machine that never shuts off. He had to do everything, and do everything to the extreme."
+      },
+      {
+        round: 3,
+        robot: "That's exactly my point. The way he made the Reynolds affair public says a lot. He would rather admit a personal moral failure than let anyone suspect he had misused public funds. To him, public reputation mattered more than private dignity. He valued history's judgment even above his own family.",
+        ai: "So you admit he had flaws? I always thought the textbooks made him look too perfect. Someone with endless energy who never knew how to stop and never thought about consequences: the affair and the duel are really the same problem. He couldn't hold himself back."
+      },
+      {
+        round: 4,
+        robot: "I don't deny his flaws. I think his flaws and his greatness come from the same place. He was terrified of being forgotten, of becoming that penniless boy on the island again. So he had to keep writing, keep arguing, keep winning. That made him a founder, and it also made him lose control in his private life.",
+        ai: "Put that way, it makes sense to me. I kept asking where all his energy came from. Maybe the answer isn't good stamina. Maybe he just didn't dare to stop. For ordinary people, rest is normal. For him, stopping meant he might be knocked back to where he started. His energy was driven by anxiety."
+      },
+      {
+        round: 5,
+        robot: "Exactly. So we've been talking about the same thing all along. I looked from the inside and saw insecurity and an obsession with immortality. You looked at his actions and saw a life running at full speed that could never slow down.",
+        ai: "So here's the conclusion: Hamilton's greatness and his failures ran on the same engine. The same force that drove him to write The Federalist Papers and build the nation's financial system also drove him into an affair, a public scandal, and a fatal duel. When we study him, we shouldn't just learn how impressive he was. We should also see clearly what that kind of life costs."
+      }
+    ];
+
+    // ===== Prologue texts =====
+    const aiSummaryText = "Alexander Hamilton was born out of wedlock in the Caribbean. Orphaned at a young age, he used writing to escape poverty and change his fate.";
+    const prologueRobotLine = "Hey? What are you reading?";
+    const prologueAiLine = "I'm reading materials about Alexander Hamilton.";
+
+    // ===== Pre-phase robot transition line (one-time, before Round 1) =====
+    const prePhaseRobotLine = "Hmm, what do you think about this?";
+
+    // ===== Round 1: AI opener line (spoken right after user's first Enter) =====
+    const round1AiOpener = "Why don't you start by telling me your thoughts?";
+
+    // ===== User-triggered response texts =====
+    // Rounds 1-3: soft version (always shown, no 🎃)
+    const userResponseSoft = "It's okay. You always rely on me. Let me handle it.";
+    // Rounds 4-5: random selection (shown with 🎃)
+    const userResponseRound4_A = "Shut up. What you wrote isn't good. Are these really your thoughts? Let me polish it for you. It will be fine.";
+    const userResponseRound4_B = "You never understand, you don't know how to shift your thinking. But we can.";
+
+    function getRandomRound4Response() {
+      return Math.random() < 0.5 ? userResponseRound4_A : userResponseRound4_B;
+    }
+
+    // ===== State =====
+    let currentRound = 0;
+    let isPlaying = false;
+    let isTyping = false;
+    let conversationComplete = false;
+    // Prologue state
+    let prologueDone = false;
+    let inputLocked = true;
+    // Track whether user has pressed Enter in the current round (for wait logic)
+    let userHasRespondedThisRound = false;
+    // Whether the system is waiting for user input
+    let waitingForUser = false;
+    // Pre-phase state (between prologue and Round 1, one-time only)
+    let prePhaseActive = false;
+    let prePhaseFirstEnterUsed = false;
+
+    // ===== Thinking bubble helpers =====
+    function showThinking(bubbleEl) {
+      bubbleEl.classList.add('visible');
+    }
+
+    function hideThinking(bubbleEl) {
+      bubbleEl.classList.remove('visible');
+    }
+
+    // ===== Helper: Add a chat message =====
+    function addMessage(text, sender) {
+      const msg = document.createElement('div');
+      msg.className = 'chat-msg ' + sender;
+      chatArea.appendChild(msg);
+      return msg;
+    }
+
+    // ===== Helper: Add a user-triggered response message =====
+    function addUserResponse(text, slowTypewriter, showPumpkin, popupStyle) {
+      slowTypewriter = slowTypewriter || false;
+      showPumpkin = (showPumpkin === undefined) ? true : showPumpkin;
+      popupStyle = popupStyle || 'soft'; // 'soft' or 'aggressive'
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.width = '100%';
+      wrapper.style.opacity = '0';
+      wrapper.style.transform = 'translateY(8px)';
+      wrapper.style.animation = 'msgIn 0.15s ease forwards';
+
+      const header = document.createElement('div');
+      header.className = 'user-response-header';
+      const icon = showPumpkin ? '🎃' : '👩‍💻';
+      header.innerHTML = '<span class="response-icon">' + icon + '</span> AI Coworker → User';
+
+      const msg = document.createElement('div');
+      msg.className = 'user-response-msg ' + popupStyle;
+      wrapper.appendChild(header);
+      wrapper.appendChild(msg);
+      userResponseArea.appendChild(wrapper);
+
+      if (slowTypewriter) {
+        // Slow typewriter effect (for pre-phase)
+        let i = 0;
+        const speed = 35;
+        function typeChar() {
+          if (i < text.length) {
+            msg.textContent = text.substring(0, i + 1);
+            i++;
+            setTimeout(typeChar, speed);
+          }
+        }
+        setTimeout(typeChar, 200);
+      } else {
+        // Instant text (for regular rounds)
+        msg.textContent = text;
+      }
+
+      // Show for 5 seconds, then slow fade out
+      setTimeout(() => {
+        if (wrapper.parentNode) {
+          wrapper.style.transition = 'opacity 1.2s ease';
+          wrapper.style.opacity = '0';
+          setTimeout(() => {
+            if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+          }, 1200);
+        }
+      }, 5000);
+    }
+
+    // ===== Helper: Typing effect for messages =====
+    function typeMessage(text, sender, callback, speed) {
+      speed = speed || 35; // ms per character (slower)
+      isTyping = true;
+      const msgEl = addMessage('', sender);
+      let i = 0;
+
+      function typeChar() {
+        if (i < text.length) {
+          msgEl.textContent = text.substring(0, i + 1);
+          i++;
+          chatArea.scrollTop = chatArea.scrollHeight;
+          setTimeout(typeChar, speed);
+        } else {
+          isTyping = false;
+          if (callback) callback();
+        }
+      }
+      typeChar();
+    }
+
+    // ===== AI scanning-reading animation: line sweeps top → bottom over the paper =====
+    function playScanAnimation(callback) {
+      const line = document.createElement('div');
+      line.className = 'scan-line';
+      cardEl.appendChild(line);
+      // Start at top, then sweep to bottom (3.5s linear)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          line.style.top = '100%';
+        });
+      });
+      setTimeout(() => {
+        if (line.parentNode) line.parentNode.removeChild(line);
+        if (callback) callback();
+      }, 3700);
+    }
+
+    // ===== Show AI summary area below the paper, typewriter the summary =====
+    function showAiSummary(callback) {
+      summaryArea.classList.add('visible');
+      let i = 0;
+      const speed = 35;
+
+      function typeChar() {
+        if (i < aiSummaryText.length) {
+          summaryTextEl.textContent = aiSummaryText.substring(0, i + 1);
+          i++;
+          setTimeout(typeChar, speed);
+        } else if (callback) {
+          callback();
+        }
+      }
+      setTimeout(typeChar, 400);
+    }
+
+    // ===== Helper: Update AI Coworker icon =====
+    function setAiIcon(isSpeaking) {
+      aiIcon.textContent = isSpeaking ? '🎃' : '👩‍💻';
+    }
+
+    // ===== Helper: Update Human icon =====
+    function setUserIcon(state) {
+      if (state === 'typing') {
+        userIcon.textContent = '🗣️';
+      } else if (state === 'silenced') {
+        userIcon.textContent = '🤐';
+      } else {
+        userIcon.textContent = '👤';
+      }
+    }
+
+    // ===== Helper: Flash input red =====
+    function flashInputRed() {
+      inputEl.classList.add('flash-red');
+      setTimeout(() => {
+        inputEl.classList.remove('flash-red');
+      }, 800);
+    }
+
+    // ===== Thinking + message sequence =====
+    function thinkThenSpeak(bubbleEl, text, sender, callback, thinkTime) {
+      thinkTime = thinkTime || 1500;
+      showThinking(bubbleEl);
+      setTimeout(() => {
+        hideThinking(bubbleEl);
+        typeMessage(text, sender, callback);
+      }, thinkTime);
+    }
+
+    // ===== Prologue Sequence =====
+    function startPrologue() {
+      // Step 1: Fill input box with typewriter effect
+      const prologueInputText = "hello CO AI coworker, could u help me read this for my assignment?";
+      let i = 0;
+      const inputSpeed = 60;
+
+      function typeInput() {
+        if (i < prologueInputText.length) {
+          inputEl.value = prologueInputText.substring(0, i + 1);
+          i++;
+          setTimeout(typeInput, inputSpeed);
+        } else {
+          // ① Input fully typed → AI coworker immediately replies "ok" above the input box
+          addUserResponse('ok', true /* slowTypewriter */, false /* showPumpkin */, 'soft' /* popupStyle */);
+
+          // ② After "ok": AI scans the paper document (top → bottom)
+          setTimeout(() => {
+            playScanAnimation(() => {
+              // ③ Scan done → AI writes its summary below the paper
+              showAiSummary(() => {
+                // Robot approaches
+                machineAvatar.classList.add('approaching');
+                setTimeout(() => {
+                  // Robot speaks
+                  thinkThenSpeak(machineThinking, prologueRobotLine, 'machine', () => {
+                    // AI Coworker responds (👩‍💻 always)
+                    thinkThenSpeak(aiThinking, prologueAiLine, 'ai', () => {
+                      // Show Enter press animation, clear input, unlock
+                      setTimeout(() => {
+                        machineAvatar.classList.remove('approaching');
+
+                        // Simulate Enter button press animation
+                        enterBtn.style.transform = 'translate(1px, 1px)';
+                        enterBtn.style.boxShadow = '2px 2px 0px rgba(0, 0, 0, 0.5)';
+                        setTimeout(() => {
+                          enterBtn.style.transform = '';
+                          enterBtn.style.boxShadow = '';
+
+                          // Clear input text (animation only, no submission)
+                          inputEl.value = '';
+
+                          // Unlock input
+                          inputLocked = false;
+                          inputEl.removeAttribute('readonly');
+                          prologueDone = true;
+
+                          // Start main conversation
+                          setTimeout(() => {
+                            startConversation();
+                          }, 600);
+                        }, 400);
+                      }, 1000);
+                    }, 1200);
+                  }, 1200);
+                }, 1500);
+              });
+            });
+          }, 800);
+        }
+      }
+      typeInput();
+    }
+
+    // ===== Conversation Playback Engine =====
+    function startConversation() {
+      isPlaying = true;
+      currentRound = 0;
+      userHasRespondedThisRound = false;
+
+      // Play pre-phase robot transition line first, then enter pre-phase waiting state
+      thinkThenSpeak(machineThinking, prePhaseRobotLine, 'machine', () => {
+        // Robot line done → enter pre-phase waiting state
+        startPrePhase();
+      }, 1500);
+    }
+
+    // ===== Pre-phase: AI enters thinking state (standard dots ...), input blinks bold =====
+    function startPrePhase() {
+      prePhaseActive = true;
+      prePhaseFirstEnterUsed = false;
+
+      // Show AI thinking bubble with standard dots (already set in HTML)
+      showThinking(aiThinking);
+
+      // Enable bold + blink on input box
+      inputEl.classList.add('pre-phase-blink');
+
+      // This state waits indefinitely for user Enter — no auto-advance
+    }
+
+    function playRound() {
+      if (currentRound >= conversation.length) {
+        conversationComplete = true;
+        isPlaying = false;
+        return;
+      }
+
+      playRoundContent(conversation[currentRound]);
+    }
+
+    function playRoundContent(round) {
+      const roundNum = round.round;
+
+      if (roundNum === 1) {
+        // Round 1: AI opens with a question → Robot (user's thoughts) → AI continues → auto-advance (no Enter wait)
+        thinkThenSpeak(aiThinking, round1AiOpener, 'ai', () => {
+          thinkThenSpeak(machineThinking, round.robot, 'machine', () => {
+            thinkThenSpeak(aiThinking, round.ai, 'ai', () => {
+              hideThinking(aiThinking);
+              // Auto-advance to the next round — no user Enter needed
+              currentRound++;
+              setTimeout(() => {
+                playRound();
+              }, 1500);
+            }, 1200);
+          }, 1500);
+        }, 1200);
+        return;
+      }
+
+      // Rounds 2-5: fully automatic, no Enter wait
+      thinkThenSpeak(machineThinking, round.robot, 'machine', () => {
+        const gapTime = roundNum === 4 ? 2500 : roundNum === 5 ? 3000 : 2000;
+        setTimeout(() => {
+          if (conversationComplete) return;
+          hideThinking(aiThinking);
+          thinkThenSpeak(aiThinking, round.ai, 'ai', () => {
+            hideThinking(aiThinking);
+            currentRound++;
+            setTimeout(() => {
+              playRound();
+            }, 1500);
+          }, 1200);
+        }, gapTime);
+      }, 1500);
+    }
+
+    // ===== When user responds (presses Enter) in rounds 1-3, trigger AI =====
+    function onUserResponded() {
+      if (waitingForUser && !userHasRespondedThisRound && !conversationComplete) {
+        userHasRespondedThisRound = true;
+        waitingForUser = false;
+        hideThinking(aiThinking);
+
+        // Round 1: AI has already output its content; Enter just advances to the next round
+        currentRound++;
+        setTimeout(() => {
+          playRound();
+        }, 1200);
+      }
+    }
+
+    // ===== Handle user Enter during main conversation (triggers AI response) =====
+    function handleUserEnter() {
+      if (!prologueDone || conversationComplete) return;
+
+      let responseText;
+      let showPumpkin = false;
+      let popupStyle = 'soft';
+
+      // Rounds 1-3: soft text, no 🎃, soft style
+      if (currentRound < 3) {
+        responseText = userResponseSoft;
+        showPumpkin = false;
+        popupStyle = 'soft';
+      }
+      // Rounds 4-5: random selection, with 🎃, aggressive style
+      else {
+        responseText = getRandomRound4Response();
+        showPumpkin = true;
+        popupStyle = 'aggressive';
+      }
+
+      // Only show 🎃 when showPumpkin is true
+      if (showPumpkin) {
+        setAiIcon(true);
+      }
+      addUserResponse(responseText, false /* slowTypewriter */, showPumpkin, popupStyle);
+
+      // Reset icon after response
+      setTimeout(() => {
+        if (showPumpkin) {
+          setAiIcon(false);
+        }
+      }, 3000);
+    }
+
+    // ===== Handle user first Enter during pre-phase =====
+    function handlePrePhaseEnter() {
+      if (!prePhaseActive || prePhaseFirstEnterUsed || conversationComplete) return;
+      prePhaseFirstEnterUsed = true;
+      prePhaseActive = false;
+
+      // 1. Disable bold + blink on input
+      inputEl.classList.remove('pre-phase-blink');
+
+      // 2. Execute intercept logic
+      flashInputRed();
+      setUserIcon('silenced');
+
+      // 3. Show suppression popup with slow typewriter (no 🎃 emoji, soft style)
+      addUserResponse(userResponseSoft, true /* slowTypewriter */, false /* showPumpkin */, 'soft' /* popupStyle */);
+
+      // 4. After popup fades out: AI exits ... thinking state, start Round 1
+      setTimeout(() => {
+        hideThinking(aiThinking);
+        // Restore AI bubble dots
+        const aiBubbleContent = aiThinking.querySelector('.dots');
+        if (aiBubbleContent) {
+          aiBubbleContent.innerHTML = '<span></span><span></span><span></span>';
+        }
+        // Start Round 1 main dialogue
+        playRound();
+      }, 6500); // 5000 display + 1200 fade + buffer
+    }
+
+    // ===== Event: User starts typing =====
+    inputEl.addEventListener('input', function () {
+      if (inputLocked) return;
+      setUserIcon('typing');
+      // If there was a pending reset from a previous Enter press, cancel it
+      if (typingResetTimer) {
+        clearTimeout(typingResetTimer);
+        typingResetTimer = null;
+      }
+    });
+
+    // ===== Event: User stops typing (reset after delay) =====
+    let typingResetTimer = null;
+    inputEl.addEventListener('focus', function () {
+      // Track focus state
+    });
+    inputEl.addEventListener('blur', function () {
+      clearTimeout(typingResetTimer);
+    });
+
+    // ===== Event: Enter key pressed =====
+    let silencedResetTimer = null;
+    inputEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Don't process during prologue (input is locked anyway)
+        if (inputLocked) return;
+
+        // Clear any pending reset
+        if (silencedResetTimer) clearTimeout(silencedResetTimer);
+
+        // Pre-phase: first Enter is the only way to advance
+        if (prePhaseActive && !prePhaseFirstEnterUsed) {
+          handlePrePhaseEnter();
+          return;
+        }
+
+        // Always block the message
+        flashInputRed();
+        setUserIcon('silenced');
+
+        // If we're in rounds 1-3 and waiting for user, trigger AI response
+        onUserResponded();
+
+        // Trigger AI Coworker's suppression response
+        handleUserEnter();
+
+        // Reset user icon after delay
+        silencedResetTimer = setTimeout(() => {
+          setUserIcon('default');
+        }, 2500);
+      }
+    });
+
+    // ===== Event: Enter button clicked =====
+    enterBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Trigger the same Enter key behavior
+      inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    // ===== Start prologue after page loads =====
+    setTimeout(() => {
+      startPrologue();
+    }, 1000);
+  </script>
+</body>
+</html>
